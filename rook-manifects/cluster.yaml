@@ -1,0 +1,32 @@
+---
+apiVersion: ceph.rook.io/v1
+kind: CephCluster
+metadata:
+  name: rook-ceph
+  namespace: rook-ceph
+spec:
+  cephVersion:
+    image: ceph/ceph:v14.2.1-20190430
+    allowUnsupported: false
+  dataDirHostPath: /var/lib/rook
+  mon:
+    count: 3
+    allowMultiplePerNode: false
+  dashboard:
+    enabled: true
+  network:
+    hostNetwork: false
+  rbdMirroring:
+    workers: 0
+  annotations:
+  resources:
+  storage: # cluster level storage configuration and selection
+    useAllNodes: true
+    useAllDevices: false
+    deviceFilter:
+    location:
+    config:
+    storeConfig:
+      storeType: bluestore
+    directories:
+    - path: /var/lib/rook

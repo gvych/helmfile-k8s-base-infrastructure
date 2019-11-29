@@ -1,0 +1,91 @@
+  - name: prometheus
+    namespace: prometheus
+    chart: stable/prometheus-operator
+    values:
+      - additionalPrometheusRulesMap:
+          internal-events:
+            groups:
+            - name: ContainerStatuses
+              rules:
+              - alert: KubePodContainerStatus
+                #sum_over_time will calculate for how long Error status exists in metrics. For 1h if will be between 0 and 20 of 10m aggregates. We will send one alert during this hour. On next hour it will be equal to 20, and allert will not trigger again.
+                #So we will get one alert on each new Error status appeareance.
+                expr: sum_over_time(kube_pod_container_status_last_terminated_reason{reason=~"Error|OOMKilled|DeadlineExceeded|ContainerCannotRun"}[10m]) > 0 < 20
+                for: 1m
+                annotations:
+                  message:  Container {{ "{{" }} $labels.container {{ "}}" }} in Namespace {{ "{{" }} $labels.namespace {{ "}}" }} in Pod {{ "{{" }} $labels.pod {{ "}}" }} got status {{ "{{" }} $labels.reason {{ "}}" }}
+                labels:
+                  severity: warning
+
+      - alertmanager:
+          config:
+            global:
+              resolve_timeout: 3m
+            receivers:
+            - name: telegram
+              webhook_configs:
+              - send_resolved: true
+                url: "http://telegram-bot.prometheus.svc.cluster.local:9087/alert/{{ .Environment.Values.telegram_chat_id }}"
+            route:
+              group_by:
+              - job
+              group_interval: 5m
+              group_wait: 30s
+              receiver: "telegram"
+              repeat_interval: 4h
+              routes:
+                - match:
+                    severity: warning
+                  receiver: "telegram"
+
+      - prometheus:
+          ingress:
+            enabled: false
+          rbac:
+            roleNamespaces:
+              - kube-system
+              - default
+              - rook-ceph
+
+      - grafana:
+          adminUser: admin
+          adminPassword: admin123
+          ingress:
+            enabled: true
+            hosts:
+              #- grafana.{{ .Environment.Values.ingress_domain }}
+              - grafana.vyach.xyz
+            tls:
+            - secretName: grafana-tls
+              hosts:
+                #- grafana.{{ .Environment.Values.ingress_domain }}
+                - grafana.vyach.xyz
+          datasources:
+            datasources.yaml:
+              apiVersion: 1
+              datasources:
+              - name: Loki
+                type: loki
+                access: proxy
+                url: http://loki.loki.svc.cluster.local:3100/
+#          dashboardProviders:
+#          dashboards:
+#            default:
+#              k8s:
+#                url: https://grafana.com/api/dashboards/8588/revisions/1/download
+#              ceph:
+#                gnetId: "7056"
+#                revision: "2"
+#                datasource: Prometheus
+#            dashboardproviders.yaml:
+#              apiVersion: 1
+#              providers:
+#              - name: 'default'
+#                orgId: 1
+#                folder: ''
+#                type: file
+#                disableDeletion: false
+#                editable: true
+#                options:
+#                  path: /var/lib/grafana/dashboards
+

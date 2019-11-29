@@ -1,0 +1,108 @@
+repositories:
+- name: loki
+  url: https://grafana.github.io/loki/charts
+- name: rook-release
+  url: https://charts.rook.io/release
+- name: presslabs
+  url: https://presslabs.github.io/charts
+
+helmDefaults:
+  tillerNamespace: kube-system
+
+environments:
+  default:
+    values:
+    - ingress_domain: green.vyach.xyz
+    - dev_ingress_domain: dev.vyach.xyz
+    - telegram_chat_id: "-23143512531423"
+    - blackbox_targets:
+      - "https://vyach.xyz"
+    - minio:
+        accessKey: "QWKASDLKJQLKJ123LJKJ"
+        secretKey: "LKlasdfFLKjsalkLKJDlkasklsdaKLLKJLKJAASj"
+
+
+releases:
+{{ readFile "prometheus.yaml" }}
+  - name: minio
+    namespace: minio
+    chart: ./minio-chart
+    values:
+    - accessKey: {{ .Environment.Values.minio.accessKey }}
+    - secretKey: {{ .Environment.Values.minio.secretKey }}
+    - defaultBucket:
+        enabled: true
+    - ingress:
+        enabled: true
+        annotations:
+          kubernetes.io/ingress.class: nginx
+          kubernetes.io/tls-acme: "true"
+          nginx.ingress.kubernetes.io/proxy-body-size: "0"
+        hosts:
+        - minio.{{ .Environment.Values.dev_ingress_domain }}
+        tls:
+        - secretName: minio-tls
+          hosts:
+          - minio.{{ .Environment.Values.dev_ingress_domain }}
+
+  - name: mysql-operator
+    namespace: mysql-operator
+    chart: presslabs/mysql-operator
+
+  - name: cert
+    namespace: kube-system
+    chart: jetstack/cert-manager
+    version: 0.10.0
+    values:
+      - webhook:
+          enabled: false
+      - ingressShim:
+           defaultIssuerName: letsencrypt-prod
+
+  - name: rook
+    namespace: rook-ceph
+    chart: rook-release/rook-ceph
+    #version: v1.0.4
+
+  - name: nginx-ingress
+    namespace: ingress
+    chart: stable/nginx-ingress
+    values:
+      - controller:
+          metrics:
+            enabled: true
+            #serviceMonitor:
+            #  enabled: true
+            service:
+              annotations:
+                prometheus.io/scrape: "true"
+                prometheus.io/port: "10254"
+          stats:
+            enabled: true
+          kind: "DaemonSet"
+          daemonset:
+            useHostPort: true
+          hostNetwork: true
+          service:
+            type: "NodePort"
+            externalTrafficPolicy: "Local"
+    wait: true
+
+  - name: loki
+    namespace: loki
+    chart: loki/loki-stack
+
+  - name: telegram-bot
+    chart: ./telegram-bot
+    namespace: prometheus
+
+  - name: blackbox-exporter
+    chart: stable/prometheus-blackbox-exporter
+    namespace: prometheus
+
+  - name: blackbox-svc-mon
+    chart: ./blackbox-exporter-servicemonitor
+    namespace: prometheus
+    set:
+    - name: targets
+      values: {{ .Environment.Values.blackbox_targets | toJson }}
