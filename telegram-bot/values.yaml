@@ -3,8 +3,8 @@
 # Declare variables to be passed into your templates.
 replicaCount: 1
 telegram:
-  token: "708842981:AAGgKYTu9A1mBQMvIop-4fCCG30zyFqCsjo"
-  #chat_id: "-1001448001276" #not used at the moment
+  token: "41321432151:asdfwfeAFEDCQadadfw-Dwsadfqeasd"
+  #chat_id: "-12341234123421" #not used at the moment
 
 releaseOverride: telegram-bot
 image:
